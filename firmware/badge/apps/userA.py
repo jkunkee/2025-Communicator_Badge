@@ -55,19 +55,24 @@ class App(BaseApp):
         print(message)
 
     def poll_data(self):
-        if self.scd30 and self.scd30.get_status_ready():
-            self.screen_has_latest_data = False
-            print(self.measurement)
-            self.measurement = self.scd30.read_measurement()
-            tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
-                                               destination=BROADCAST_ADDRESS,
-                                               payload=(
-                                                   int(0), # version
-                                                   float(self.measurement[0]), # ppm CO2
-                                                   float(self.measurement[1]), # deg C
-                                                   float(self.measurement[2]), # percent relative humidity
-                                               ))
-            self.badge.lora.send(tx_msg)
+        # This scd30 driver isn't very resilient to the device falling off the bus sometimes,
+        # but this is a wearable so we just deal with it.
+        try:
+            if self.scd30 and self.scd30.get_status_ready():
+                self.screen_has_latest_data = False
+                print(self.measurement)
+                self.measurement = self.scd30.read_measurement()
+                tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
+                                                destination=BROADCAST_ADDRESS,
+                                                payload=(
+                                                    int(0), # version
+                                                    float(self.measurement[0]), # ppm CO2
+                                                    float(self.measurement[1]), # deg C
+                                                    float(self.measurement[2]), # percent relative humidity
+                                                ))
+                self.badge.lora.send(tx_msg)
+        except:
+            print("scd30 read failure")
 
     def run_foreground(self):
         """ Run one pass of the app's behavior when it is in the foreground (has keyboard input and control of the screen).
