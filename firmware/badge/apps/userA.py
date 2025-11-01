@@ -36,6 +36,8 @@ class App(BaseApp):
             self.scd30 = scd30.SCD30(self.badge.sao_i2c, 0x61, 5000)
             self.scd30.set_measurement_interval(2)
             #self.scd30.start_continous_measurement(950)
+        else:
+            self.scd30 = None
         self.measurement = None
         self.screen_has_latest_data = True
 
@@ -61,9 +63,12 @@ class App(BaseApp):
             If the app only runs in the background, you can delete this method.
         """
         self.poll_data()
-        if not self.screen_has_latest_data:
-            self.screen_has_latest_data = True
-            self.p.infobar_left.set_text(str(self.measurement))
+        if self.scd30:
+            if not self.screen_has_latest_data:
+                self.screen_has_latest_data = True
+                self.p.infobar_left.set_text(str(self.measurement))
+        else:
+            self.p.infobar_left.set_text("Device not present")
 
         if self.badge.keyboard.f1():
             print("Hello ")
