@@ -3,6 +3,7 @@
 import uasyncio as aio  # type: ignore
 
 from apps.base_app import BaseApp
+from apps import scd30
 from net.net import register_receiver, send, BROADCAST_ADDRESS
 from net.protocols import Protocol, NetworkFrame
 from ui.page import Page
@@ -29,9 +30,14 @@ class App(BaseApp):
         super().__init__(name, badge)
         # You can also set the sleep time when running in the foreground or background. Uncomment and update.
         # Remember to make background sleep longer so this app doesn't interrupt other processing.
-        # self.foreground_sleep_ms = 10
-        # self.background_sleep_ms = 1000
-
+        self.foreground_sleep_ms = 10
+        self.background_sleep_ms = 2000
+        if 0x61 in self.badge.sao_i2c.scan():
+            self.scd30 = scd30.SCD30(self.badge.sao_i2c, 0x61, 5000)
+            self.scd30.set_measurement_interval(2)
+            #self.scd30.start_continous_measurement(950)
+        self.measurement = None
+        self.screen_has_latest_data = True
 
     def start(self):
         """ Register the app with the system.
@@ -42,12 +48,22 @@ class App(BaseApp):
         super().start()
         # register_receiver(NEW_PROTOCOL, self.receive_message)
 
+    def poll_data(self):
+        if self.scd30 and self.scd30.get_status_ready():
+            self.screen_has_latest_data = False
+            print(self.measurement)
+            self.measurement = self.scd30.read_measurement()
+
     def run_foreground(self):
         """ Run one pass of the app's behavior when it is in the foreground (has keyboard input and control of the screen).
             You do not need to loop here, and the app will sleep for at least self.foreground_sleep_ms milliseconds between calls.
             Don't block in this function, for it will block reading the radio and keyboard.
             If the app only runs in the background, you can delete this method.
         """
+        self.poll_data()
+        if not self.screen_has_latest_data:
+            self.screen_has_latest_data = True
+            self.p.infobar_left.set_text(str(self.measurement))
 
         if self.badge.keyboard.f1():
             print("Hello ")
@@ -61,7 +77,6 @@ class App(BaseApp):
         if self.badge.keyboard.f5():
             self.badge.display.clear()
             self.switch_to_background()
-        
 
     def run_background(self):
         """ App behavior when running in the background.
@@ -70,6 +85,7 @@ class App(BaseApp):
             If the app only does things when running in the foreground, you can delete this method.
         """
         super().run_background()
+        self.poll_data()
 
     def switch_to_foreground(self):
         """ Set the app as the active foreground app.
@@ -85,6 +101,7 @@ class App(BaseApp):
         self.p.create_content()
         self.p.create_menubar(["Hello", "World", "Read more", "Hackaday", "Done"])
         self.p.replace_screen()
+        self.screen_has_latest_data = False
 
 
     def switch_to_background(self):
