@@ -16,7 +16,7 @@ Try to pick a protocol ID that isn't in use yet; good luck.
 Structdef is the struct library format string. This is a subset of cpython struct.
 https://docs.micropython.org/en/latest/library/struct.html
 """
-# NEW_PROTOCOL = Protocol(port=<PORT>, name="<NAME>", structdef="!")
+ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bfff")
 
 
 class App(BaseApp):
@@ -48,13 +48,26 @@ class App(BaseApp):
             If you don't have anything else to add, you can delete this method.
         """
         super().start()
-        # register_receiver(NEW_PROTOCOL, self.receive_message)
+        register_receiver(ATMOS_PROTOCOL, self.receive_message)
+
+    def receive_message(self, message: NetworkFrame):
+        """Handle incoming messages."""
+        print(message)
 
     def poll_data(self):
         if self.scd30 and self.scd30.get_status_ready():
             self.screen_has_latest_data = False
             print(self.measurement)
             self.measurement = self.scd30.read_measurement()
+            tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
+                                               destination=BROADCAST_ADDRESS,
+                                               payload=(
+                                                   int(0), # version
+                                                   float(self.measurement[0]), # ppm CO2
+                                                   float(self.measurement[1]), # deg C
+                                                   float(self.measurement[2]), # percent relative humidity
+                                               ))
+            self.badge.lora.send(tx_msg)
 
     def run_foreground(self):
         """ Run one pass of the app's behavior when it is in the foreground (has keyboard input and control of the screen).
