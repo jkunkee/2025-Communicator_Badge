@@ -16,6 +16,7 @@ Try to pick a protocol ID that isn't in use yet; good luck.
 Structdef is the struct library format string. This is a subset of cpython struct.
 https://docs.micropython.org/en/latest/library/struct.html
 """
+# Yes, this is a Doctor Who reference
 ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bfff")
 
 
