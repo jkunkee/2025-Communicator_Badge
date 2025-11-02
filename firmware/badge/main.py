@@ -28,7 +28,7 @@ async def main():
     badgenet.init(badge)
     # Link them into the menu system here, for starters
     user_apps = [
-        atmosdata.App("ATMOS", badge),
+        atmosdata.AtmosphereData("ATMOS", badge),
         spectrum.App("spectrum", badge),
         hwmonitor.App("hwmon", badge),
         hot_topic.HotTopic("hot topic", badge),

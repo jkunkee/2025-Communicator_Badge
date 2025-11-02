@@ -1,4 +1,3 @@
-"""Template app for badge applications. Copy this file and update to implement your own app."""
 
 import uasyncio as aio  # type: ignore
 
@@ -10,52 +9,50 @@ from ui.page import Page
 import ui.styles as styles
 import lvgl
 
-"""
-All protocols must be defined in their apps with unique ports. Ports must fit in uint8.
-Try to pick a protocol ID that isn't in use yet; good luck.
-Structdef is the struct library format string. This is a subset of cpython struct.
-https://docs.micropython.org/en/latest/library/struct.html
-"""
 # Yes, this is a Doctor Who reference
 ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bfff")
 
+class AtmosphereData(BaseApp):
+    """ This class either receives and displays atmosphere data (think air quality/AQI)
+        or it uses attached I2C sensors to generate and display the same.
 
-class App(BaseApp):
-    """Define a new app to run on the badge."""
+        It is currently inflexible with a very basic UI. Please feel free to make it better :)
+    """
 
     def __init__(self, name: str, badge):
-        """ Define any attributes of the class in here, after super().__init__() is called.
-            self.badge will be available in the rest of the class methods for accessing the badge hardware.
-            If you don't have anything else to add, you can delete this method.
-        """
         super().__init__(name, badge)
-        # You can also set the sleep time when running in the foreground or background. Uncomment and update.
-        # Remember to make background sleep longer so this app doesn't interrupt other processing.
+
+        self.sensor_refresh_interval_ms = 5000
+        self.scd30_address = 0x61
+        self.ATMOS_VERSION = 0
+
         self.foreground_sleep_ms = 10
-        self.background_sleep_ms = 2000
+        self.background_sleep_ms = self.sensor_refresh_interval_ms
+
         if 0x61 in self.badge.sao_i2c.scan():
-            self.scd30 = scd30.SCD30(self.badge.sao_i2c, 0x61, 5000)
-            self.scd30.set_measurement_interval(5)
-            #self.scd30.start_continous_measurement(950)
+            self.scd30 = scd30.SCD30(self.badge.sao_i2c, 0x61) # leave internal sleep at default 1000us
+            self.scd30.set_measurement_interval(int(self.sensor_refresh_interval_ms/1000))
+            self.producing_data = True
         else:
             self.scd30 = None
-        self.measurement = None
+            self.producing_data = False
+
+        self.measurement = [-1, -1, -1]
         self.screen_has_latest_data = True
-        self.current_lines = []
+
         self.current_line_labels = []
 
     def start(self):
-        """ Register the app with the system.
-            This is where to register any functions to be called when a message of that protocol is received.
-            The app will start running in the background.
-            If you don't have anything else to add, you can delete this method.
-        """
         super().start()
         register_receiver(ATMOS_PROTOCOL, self.receive_message)
 
     def receive_message(self, message: NetworkFrame):
         """Handle incoming messages."""
-        print(message)
+        print(f"atmos received message {message.payload}")
+        # TODO do this check for register_receiver instead (this is easier to debug)
+        if not self.producing_data and message.port == ATMOS_PROTOCOL.port and message.payload[0] == self.ATMOS_VERSION:
+            self.measurement = message.payload[1:3]
+            self.screen_has_latest_data = False
 
     def poll_data(self):
         # This scd30 driver isn't very resilient to the device falling off the bus sometimes,
@@ -68,7 +65,7 @@ class App(BaseApp):
                 tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
                                                 destination=BROADCAST_ADDRESS,
                                                 payload=(
-                                                    int(0), # version
+                                                    int(self.ATMOS_VERSION), # version
                                                     float(self.measurement[0]), # ppm CO2
                                                     float(self.measurement[1]), # deg C
                                                     float(self.measurement[2]), # percent relative humidity
@@ -79,9 +76,8 @@ class App(BaseApp):
 
     def compose_lines(self) -> list[str]:
         l = []
-        l.append(f"{self.measurement[0]} ppm CO2")
-        l.append(f"{self.measurement[1]} deg C")
-        l.append(f"{(self.measurement[1] * 9 / 5) + 32} deg F")
+        l.append(f"{self.measurement[0]:.0f} ppm CO2")
+        l.append(f"{self.measurement[1]:.2f} deg C ({(self.measurement[1] * 9 / 5) + 32:.0f} deg F)")
         l.append(f"{self.measurement[2]}% rh")
         return l
 
@@ -101,19 +97,14 @@ class App(BaseApp):
             y_pos += 13
 
     def run_foreground(self):
-        """ Run one pass of the app's behavior when it is in the foreground (has keyboard input and control of the screen).
-            You do not need to loop here, and the app will sleep for at least self.foreground_sleep_ms milliseconds between calls.
-            Don't block in this function, for it will block reading the radio and keyboard.
-            If the app only runs in the background, you can delete this method.
-        """
-        self.poll_data()
-        if self.scd30:
-            if not self.screen_has_latest_data:
-                self.screen_has_latest_data = True
-                #self.p.infobar_left.set_text(str(self.measurement))
-                self.refresh_labels()
+        if self.producing_data:
+            self.poll_data()
         else:
-            self.p.infobar_left.set_text("Device not present")
+            pass # Wait for lora packets
+
+        if not self.screen_has_latest_data:
+            self.screen_has_latest_data = True
+            self.refresh_labels()
 
         if self.badge.keyboard.f1():
             print("Hello ")
@@ -129,20 +120,13 @@ class App(BaseApp):
             self.switch_to_background()
 
     def run_background(self):
-        """ App behavior when running in the background.
-            You do not need to loop here, and the app will sleep for at least self.background_sleep_ms milliseconds between calls.
-            Don't block in this function, for it will block reading the radio and keyboard.
-            If the app only does things when running in the foreground, you can delete this method.
-        """
         super().run_background()
-        self.poll_data()
+        if self.producing_data:
+            self.poll_data()
+        else:
+            pass # Wait for lora packets
 
     def switch_to_foreground(self):
-        """ Set the app as the active foreground app.
-            This will be called by the Menu when the app is selected.
-            Any one-time logic to run when the app comes to the foreground (such as setting up the screen) should go here.
-            If you don't have special transition logic, you can delete this method.
-        """
         super().switch_to_foreground()
         self.p = Page()
         ## Note this order is important: it renders top to bottom that the "content" section expands to fill empty space
@@ -151,15 +135,16 @@ class App(BaseApp):
         self.p.create_content()
         self.p.create_menubar(["Hello", "World", "Read more", "Hackaday", "Done"])
         self.p.replace_screen()
+        if not self.producing_data:
+            self.p.infobar_right.set_text("Awaiting packets")
+        else:
+            self.p.infobar_right.set_text(f"Polling sensors every ~{int(self.sensor_refresh_interval_ms/1000)}s")
         self.screen_has_latest_data = False
 
     def switch_to_background(self):
-        """ Set the app as a background app.
-            This will be called when the app is first started in the background and when it stops being in the foreground.
-            If you don't have special transition logic, you can delete this method.
-        """
-        self.p = None
+        # TODO: If the LVGL objects are properly parented, this loop may not be necessary.
         for l in self.current_line_labels:
             l.delete()
         self.current_line_labels = []
+        self.p = None
         super().switch_to_background()
