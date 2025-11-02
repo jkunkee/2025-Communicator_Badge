@@ -1,6 +1,6 @@
 import lvgl
 
-lcd_color_bg      = lvgl.color_hex(0xabc5a0)
+lcd_color_bg      = lvgl.color_hex(0x41ff00)
 lcd_color_fg      = lvgl.color_hex(0x292b29)
 lcd_color_fg_dark = lvgl.color_hex(0x080908)
 
