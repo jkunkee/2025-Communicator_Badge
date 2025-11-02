@@ -41,6 +41,8 @@ class App(BaseApp):
             self.scd30 = None
         self.measurement = None
         self.screen_has_latest_data = True
+        self.current_lines = []
+        self.current_line_labels = []
 
     def start(self):
         """ Register the app with the system.
@@ -75,6 +77,29 @@ class App(BaseApp):
         except:
             print("scd30 read failure")
 
+    def compose_lines(self) -> list[str]:
+        l = []
+        l.append(f"{self.measurement[0]} ppm CO2")
+        l.append(f"{self.measurement[1]} deg C")
+        l.append(f"{(self.measurement[1] * 9 / 5) + 32} deg F")
+        l.append(f"{self.measurement[2]}% rh")
+        return l
+
+    def refresh_labels(self) -> None:
+        # I should be able to get LVGL to do vertical stacking for me
+        # Many thanks to hwmon for showing how to do some of this
+        y_pos = 18
+        for label in self.current_line_labels:
+            label.delete()
+        self.current_line_labels = []
+        text_to_display = self.compose_lines()
+        for text in text_to_display:
+            label = lvgl.label(self.badge.display.screen)
+            self.current_line_labels.append(label)
+            label.set_text(text)
+            label.set_pos(25, y_pos)
+            y_pos += 13
+
     def run_foreground(self):
         """ Run one pass of the app's behavior when it is in the foreground (has keyboard input and control of the screen).
             You do not need to loop here, and the app will sleep for at least self.foreground_sleep_ms milliseconds between calls.
@@ -85,7 +110,8 @@ class App(BaseApp):
         if self.scd30:
             if not self.screen_has_latest_data:
                 self.screen_has_latest_data = True
-                self.p.infobar_left.set_text(str(self.measurement))
+                #self.p.infobar_left.set_text(str(self.measurement))
+                self.refresh_labels()
         else:
             self.p.infobar_left.set_text("Device not present")
 
@@ -121,12 +147,11 @@ class App(BaseApp):
         self.p = Page()
         ## Note this order is important: it renders top to bottom that the "content" section expands to fill empty space
         ## If you want to go fully clean-slate, you can draw straight onto the p.scr object, which should fit the full screen.
-        self.p.create_infobar(["My First App", "Prints to Serial Console"])
+        self.p.create_infobar(["Atmospheric Data Display", ""])
         self.p.create_content()
         self.p.create_menubar(["Hello", "World", "Read more", "Hackaday", "Done"])
         self.p.replace_screen()
         self.screen_has_latest_data = False
-
 
     def switch_to_background(self):
         """ Set the app as a background app.
@@ -134,6 +159,7 @@ class App(BaseApp):
             If you don't have special transition logic, you can delete this method.
         """
         self.p = None
+        for l in self.current_line_labels:
+            l.delete()
+        self.current_line_labels = []
         super().switch_to_background()
-
-
