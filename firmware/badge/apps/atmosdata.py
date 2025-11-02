@@ -107,13 +107,13 @@ class AtmosphereData(BaseApp):
             self.refresh_labels()
 
         if self.badge.keyboard.f1():
-            print("Hello ")
+            pass
         if self.badge.keyboard.f2():
-            print("World.  ")
+            pass
         if self.badge.keyboard.f3():
-            print("READ MORE ")
+            pass
         if self.badge.keyboard.f4():
-            print("HACKADAY!")
+            pass
         ## Co-op multitasking: all you have to do is get out
         if self.badge.keyboard.f5():
             self.badge.display.clear()
@@ -133,7 +133,7 @@ class AtmosphereData(BaseApp):
         ## If you want to go fully clean-slate, you can draw straight onto the p.scr object, which should fit the full screen.
         self.p.create_infobar(["Atmospheric Data Display", ""])
         self.p.create_content()
-        self.p.create_menubar(["Hello", "World", "Read more", "Hackaday", "Done"])
+        self.p.create_menubar(["", "", "", "", "Done"])
         self.p.replace_screen()
         if not self.producing_data:
             self.p.infobar_right.set_text("Awaiting packets")
