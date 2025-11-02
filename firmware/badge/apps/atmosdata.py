@@ -3,14 +3,16 @@ import uasyncio as aio  # type: ignore
 
 from apps.base_app import BaseApp
 from apps import scd30
+from apps import sps30
 from net.net import register_receiver, send, BROADCAST_ADDRESS
 from net.protocols import Protocol, NetworkFrame
 from ui.page import Page
 import ui.styles as styles
 import lvgl
+import utime
 
 # Yes, this is a Doctor Who reference
-ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bfff")
+ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bffffffff")
 
 class AtmosphereData(BaseApp):
     """ This class either receives and displays atmosphere data (think air quality/AQI)
@@ -23,22 +25,36 @@ class AtmosphereData(BaseApp):
         super().__init__(name, badge)
 
         self.sensor_refresh_interval_ms = 5000
-        self.scd30_address = 0x61
-        self.ATMOS_VERSION = 0
+        scd30_address = 0x61
+        sps30_address = 0x69
+        # v0: c02, temp, hum
+        # v1: add five particle count buckets
+        self.ATMOS_VERSION = 1
 
         self.foreground_sleep_ms = 10
         self.background_sleep_ms = self.sensor_refresh_interval_ms
 
-        if 0x61 in self.badge.sao_i2c.scan():
-            self.scd30 = scd30.SCD30(self.badge.sao_i2c, 0x61) # leave internal sleep at default 1000us
+        i2c_scan_result = self.badge.sao_i2c.scan()
+
+        if scd30_address in i2c_scan_result:
+            self.scd30 = scd30.SCD30(self.badge.sao_i2c, scd30_address) # leave internal sleep at default 1000us
             self.scd30.set_measurement_interval(int(self.sensor_refresh_interval_ms/1000))
             self.producing_data = True
         else:
             self.scd30 = None
             self.producing_data = False
 
-        self.measurement = [-1, -1, -1]
+        if sps30_address in i2c_scan_result:
+            self.sps30 = sps30.SPS30(self.badge.sao_i2c, sps30_address)
+            self.sps30.start_measurement()
+            #self.sps30 = None
+        else:
+            self.sps30 = None
+
+        self.co2_measurement = [-1, -1, -1]
+        self.particle_measurement = [-1, -1, -1, -1, -1] # five nc buckets
         self.screen_has_latest_data = True
+        self.last_transmission = 0
 
         self.current_line_labels = []
 
@@ -51,34 +67,59 @@ class AtmosphereData(BaseApp):
         print(f"atmos received message {message.payload}")
         # TODO do this check for register_receiver instead (this is easier to debug)
         if not self.producing_data and message.port == ATMOS_PROTOCOL.port and message.payload[0] == self.ATMOS_VERSION:
-            self.measurement = message.payload[1:3]
+            self.co2_measurement = message.payload[1:3]
+            self.particle_measurement = message.payload[4:8]
             self.screen_has_latest_data = False
 
     def poll_data(self):
+        # safety
+        if not self.producing_data:
+            return
         # This scd30 driver isn't very resilient to the device falling off the bus sometimes,
         # but this is a wearable so we just deal with it.
         try:
+            transmit_new_data = False
+            now = utime.ticks_ms()
             if self.scd30 and self.scd30.get_status_ready():
                 self.screen_has_latest_data = False
-                print(self.measurement)
-                self.measurement = self.scd30.read_measurement()
+                transmit_new_data = True
+                print(f"co2: {self.co2_measurement}")
+                self.co2_measurement = self.scd30.read_measurement()
+            if self.sps30 and self.sps30.read_data_ready():
+                self.screen_has_latest_data = False
+                transmit_new_data = True
+                self.particle_measurement = self.sps30.read_measurement()
+                print(f"part: {self.particle_measurement}")
+            if transmit_new_data and (now - self.last_transmission) > self.sensor_refresh_interval_ms:
                 tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
                                                 destination=BROADCAST_ADDRESS,
                                                 payload=(
                                                     int(self.ATMOS_VERSION), # version
-                                                    float(self.measurement[0]), # ppm CO2
-                                                    float(self.measurement[1]), # deg C
-                                                    float(self.measurement[2]), # percent relative humidity
+                                                    float(self.co2_measurement[0]), # ppm CO2
+                                                    float(self.co2_measurement[1]), # deg C
+                                                    float(self.co2_measurement[2]), # percent relative humidity
+                                                    float(self.particle_measurement[4][1]), # particles/cm^3
+                                                    float(self.particle_measurement[5][1]), # particles/cm^3
+                                                    float(self.particle_measurement[6][1]), # particles/cm^3
+                                                    float(self.particle_measurement[7][1]), # particles/cm^3
+                                                    float(self.particle_measurement[8][1]), # particles/cm^3
                                                 ))
                 self.badge.lora.send(tx_msg)
+                print("ATMOS transmitted")
+                self.last_transmission = now
         except:
             print("scd30 read failure")
 
     def compose_lines(self) -> list[str]:
         l = []
-        l.append(f"{self.measurement[0]:.0f} ppm CO2")
-        l.append(f"{self.measurement[1]:.2f} deg C ({(self.measurement[1] * 9 / 5) + 32:.0f} deg F)")
-        l.append(f"{self.measurement[2]}% rh")
+        l.append(f"{self.co2_measurement[0]:.0f} ppm CO2")
+        l.append(f"{self.co2_measurement[1]:.2f} deg C ({(self.co2_measurement[1] * 9 / 5) + 32:.0f} deg F)")
+        l.append(f"{self.co2_measurement[2]}% rh")
+        l.append(f"{self.particle_measurement[4][1]} {self.particle_measurement[4][0]} particles/cm^3")
+        l.append(f"{self.particle_measurement[5][1]} {self.particle_measurement[5][0]} particles/cm^3")
+        l.append(f"{self.particle_measurement[6][1]} {self.particle_measurement[6][0]} particles/cm^3")
+        l.append(f"{self.particle_measurement[7][1]} {self.particle_measurement[7][0]} particles/cm^3")
+        l.append(f"{self.particle_measurement[8][1]} {self.particle_measurement[8][0]} particles/cm^3")
         return l
 
     def refresh_labels(self) -> None:

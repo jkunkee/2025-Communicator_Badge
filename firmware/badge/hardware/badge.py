@@ -44,7 +44,7 @@ class Badge:
 
         print("Initializing badge hardware...")
         # Reserve controller 0 for the SAO header so it never collides with the keyboard bus.
-        self.sao_i2c = I2C(0, scl=board.SAO_SCL, sda=board.SAO_SDA, freq=400000)
+        self.sao_i2c = I2C(0, scl=board.SAO_SCL, sda=board.SAO_SDA, freq=100000)
         try:
             tx_power = int(self.config.get("radio_tx_power"))
         except ValueError:
