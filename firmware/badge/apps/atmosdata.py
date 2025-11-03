@@ -2,8 +2,8 @@
 import uasyncio as aio  # type: ignore
 
 from apps.base_app import BaseApp
-from apps import scd30
-from apps import sps30
+from libs.micropython_scd30.scd30 import SCD30
+from libs.sps30_micropython.sps30 import SPS30
 from net.net import register_receiver, send, BROADCAST_ADDRESS
 from net.protocols import Protocol, NetworkFrame
 from ui.page import Page
@@ -37,7 +37,7 @@ class AtmosphereData(BaseApp):
         i2c_scan_result = self.badge.sao_i2c.scan()
 
         if scd30_address in i2c_scan_result:
-            self.scd30 = scd30.SCD30(self.badge.sao_i2c, scd30_address) # leave internal sleep at default 1000us
+            self.scd30 = SCD30(self.badge.sao_i2c, scd30_address) # leave internal sleep at default 1000us
             self.scd30.set_measurement_interval(int(self.sensor_refresh_interval_ms/1000))
             self.producing_data = True
         else:
@@ -45,7 +45,7 @@ class AtmosphereData(BaseApp):
             self.producing_data = False
 
         if sps30_address in i2c_scan_result:
-            self.sps30 = sps30.SPS30(self.badge.sao_i2c, sps30_address)
+            self.sps30 = SPS30(self.badge.sao_i2c, sps30_address)
             self.sps30.start_measurement()
             #self.sps30 = None
         else:
