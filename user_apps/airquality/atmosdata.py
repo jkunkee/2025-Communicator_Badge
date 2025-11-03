@@ -189,3 +189,7 @@ class AtmosphereData(BaseApp):
         self.current_line_labels = []
         self.p = None
         super().switch_to_background()
+
+# Zampire App Manager metadata
+APP_NAME = "AirQuality"
+APP_CLASS = AtmosphereData
