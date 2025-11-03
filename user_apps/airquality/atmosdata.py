@@ -13,6 +13,9 @@ import utime
 
 # Yes, this is a Doctor Who reference
 ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bffffffff")
+# v0: !Bfff - version, co2, temp, hum
+# v1: !Bffffffff - add five particle count buckets
+ATMOS_VERSION = 1
 
 class AtmosphereData(BaseApp):
     """ This class either receives and displays atmosphere data (think air quality/AQI)
@@ -27,9 +30,6 @@ class AtmosphereData(BaseApp):
         self.sensor_refresh_interval_ms = 5000
         scd30_address = 0x61
         sps30_address = 0x69
-        # v0: c02, temp, hum
-        # v1: add five particle count buckets
-        self.ATMOS_VERSION = 1
 
         self.foreground_sleep_ms = 10
         self.background_sleep_ms = self.sensor_refresh_interval_ms
@@ -68,7 +68,7 @@ class AtmosphereData(BaseApp):
         """Handle incoming messages."""
         print(f"atmos received message {message.payload}")
         # TODO do this check for register_receiver instead (this is easier to debug)
-        if not self.producing_data and message.port == ATMOS_PROTOCOL.port and message.payload[0] == self.ATMOS_VERSION:
+        if not self.producing_data and message.port == ATMOS_PROTOCOL.port and message.payload[0] == ATMOS_VERSION:
             self.co2_measurement = message.payload[1:3]
             self.particle_measurement = message.payload[4:8]
             self.screen_has_latest_data = False
@@ -96,7 +96,7 @@ class AtmosphereData(BaseApp):
                 tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
                                                 destination=BROADCAST_ADDRESS,
                                                 payload=(
-                                                    int(self.ATMOS_VERSION), # version
+                                                    int(ATMOS_VERSION), # version
                                                     float(self.co2_measurement[0]), # ppm CO2
                                                     float(self.co2_measurement[1]), # deg C
                                                     float(self.co2_measurement[2]), # percent relative humidity
