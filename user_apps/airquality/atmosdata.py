@@ -140,6 +140,12 @@ class AtmosphereData(BaseApp):
             text_to_display.append(f"{self.co2_measurement[1]:.2f} deg C ({(self.co2_measurement[1] * 9 / 5) + 32:.0f} deg F)")
             text_to_display.append(f"{self.co2_measurement[2]}% rh")
 
+        # unused rows
+        text_to_display.append("")
+        text_to_display.append("")
+        text_to_display.append("")
+        text_to_display.append("")
+
         if self.producing_data and not self.sps30:
             text_to_display.append("SCD30 CO2 sensor not present")
             text_to_display.append("")
@@ -151,19 +157,15 @@ class AtmosphereData(BaseApp):
             text_to_display.append(f"{self.particle_measurement[7][1]} {self.particle_measurement[7][0]} particles/cm^3")
             text_to_display.append(f"{self.particle_measurement[8][1]} {self.particle_measurement[8][0]} particles/cm^3")
 
-        # I should be able to get LVGL to do vertical stacking for me
-        # Many thanks to hwmon for showing how to do some of this
-        y_pos = 18
-        for label in self.current_line_labels:
-            label.delete()
-        self.current_line_labels = []
+        # unused rows
+        text_to_display.append("")
+        text_to_display.append("")
 
-        for text in text_to_display:
-            label = lvgl.label(self.badge.display.screen)
-            self.current_line_labels.append(label)
-            label.set_text(text)
-            label.set_pos(25, y_pos)
-            y_pos += 13
+        for idx, text in enumerate(text_to_display):
+            if idx < len(self.current_line_labels):
+                self.current_line_labels[idx].set_text(text)
+            else:
+                print("airquality: line skipped because screen small and not scrolling")
 
     def run_foreground(self):
         self.poll_data() # Does nothing if no sensors present
@@ -192,13 +194,28 @@ class AtmosphereData(BaseApp):
         ## Note this order is important: it renders top to bottom that the "content" section expands to fill empty space
         ## If you want to go fully clean-slate, you can draw straight onto the p.scr object, which should fit the full screen.
         self.p.create_infobar(["Atmospheric Data Display", ""])
-        self.p.create_content()
-        self.p.create_menubar(["", "", "", "", "Done"])
-        self.p.replace_screen()
         if not self.producing_data:
             self.p.infobar_right.set_text("Awaiting packets")
         else:
             self.p.infobar_right.set_text(f"Polling sensors every ~{int(self.sensor_refresh_interval_ms/1000)}s")
+        self.p.create_content()
+        self.current_line_labels = []
+        # Two columns of seven rows each, addressed in a flat array
+        y_pos = 0
+        for _ in range(0, 7):
+            label = lvgl.label(self.p.content)
+            label.set_pos(25, y_pos)
+            self.current_line_labels.append(label)
+            y_pos += 13
+        y_pos = 0
+        for _ in range(0, 7):
+            label = lvgl.label(self.p.content)
+            label.set_pos(214, y_pos)
+            self.current_line_labels.append(label)
+            y_pos += 13
+        self.p.create_menubar(["", "", "", "", "Done"])
+        self.p.replace_screen()
+
         self.screen_has_latest_data = False
         self.refresh_labels()
 
