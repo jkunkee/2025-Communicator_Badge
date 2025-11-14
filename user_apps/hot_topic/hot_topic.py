@@ -137,3 +137,7 @@ class HotTopic(BaseApp):
     def stop(self):
         capture_all_packets(False)
         super().stop()
+
+# Zampire App Manager metadata
+APP_NAME = "HotTopic"
+APP_CLASS = HotTopic

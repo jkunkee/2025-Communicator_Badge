@@ -864,3 +864,7 @@ class App(BaseApp):
         self.state = "game_over"
         self._set_status("Game over — press F1 to restart")
         self.board_dirty = True
+
+# Zampire App Manager metadata
+APP_NAME = "McBlockFace"
+APP_CLASS = App

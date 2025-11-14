@@ -272,3 +272,7 @@ class App(BaseApp):
             self.rooms["LACM stage"].locked = False
         else:
             self.p.msg_area.set_cell_value("You are missing some components. Keep searching!")
+
+# Zampire App Manager metadata
+APP_NAME = "TextAdv"
+APP_CLASS = App

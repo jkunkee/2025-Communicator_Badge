@@ -375,3 +375,7 @@ class App(BaseApp):
                 row = (y + j + self.GRID_HEIGHT) % self.GRID_HEIGHT
                 count += grid.get_cell_state(col, row)
         return count
+
+# Zampire App Manager metadata
+APP_NAME = "GameOfLife"
+APP_CLASS = App

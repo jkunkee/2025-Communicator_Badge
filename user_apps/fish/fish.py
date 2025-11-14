@@ -204,3 +204,7 @@ class App(BaseApp):
         self.bubbles = set()
         self.p = None
         super().switch_to_background()
+
+# Zampire App Manager metadata
+APP_NAME = "Fish"
+APP_CLASS = App

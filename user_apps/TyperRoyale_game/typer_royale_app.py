@@ -737,3 +737,7 @@ class App(BaseApp):
     # def _join_lobby(self, lobby_id):
     #     """Join existing lobby as player"""
     #     pass
+
+# Zampire App Manager metadata
+APP_NAME = "Typer"
+APP_CLASS = App

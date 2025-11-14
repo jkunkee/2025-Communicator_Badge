@@ -666,3 +666,7 @@ class SpectrumAnalyzer(BaseApp):
 
 # Export the app class
 App = SpectrumAnalyzer
+
+# Zampire App Manager metadata
+APP_NAME = "Spectrum"
+APP_CLASS = App

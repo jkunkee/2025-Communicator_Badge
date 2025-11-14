@@ -202,3 +202,7 @@ class SnakeApp(BaseApp):
         if self.game_over_label:
             self.game_over_label.delete()
             self.game_over_label = None
+
+# Zampire App Manager metadata
+APP_NAME = "Snake"
+APP_CLASS = SnakeApp

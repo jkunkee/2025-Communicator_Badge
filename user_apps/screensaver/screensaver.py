@@ -561,3 +561,7 @@ class ScreensaverApp(BaseApp):
             self.badge.display.screen.set_style_bg_color(styles.hackaday_grey, 0)
         except:
             pass
+
+# Zampire App Manager metadata
+APP_NAME = "Screensaver"
+APP_CLASS = ScreensaverApp
