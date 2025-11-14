@@ -220,7 +220,6 @@ class AtmosphereData(BaseApp):
         self.refresh_labels()
 
     def switch_to_background(self):
-        # TODO: If the LVGL objects are properly parented, this loop may not be necessary.
         self.current_line_labels = []
         self.p = None
         super().switch_to_background()
