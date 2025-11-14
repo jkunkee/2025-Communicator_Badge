@@ -40,7 +40,7 @@ async def main():
         chat.ChatApp("Chat", badge),
         talks.Talks("Talks", badge),
         nametag.App("Nametag", badge),
-        user_menu,
+        app_manager.AppManager("Apps", badge),
         config_manager.ConfigManager("Config", badge),
     ]
     # These apps aren't listed in the menus, so put them here to get started below
