@@ -8,7 +8,7 @@ try:
 
     ## Import your app here
     from apps import app_menu, chat, config_manager, usb_debug, nametag, talks
-    from apps import atmosdata, spectrum, hwmonitor, hot_topic  ## An invitation
+    from apps import atmosdata, spectrum, hwmonitor, app_manager  ## An invitation
 
 
 except Exception as ex:
@@ -31,7 +31,7 @@ async def main():
         atmosdata.AtmosphereData("ATMOS", badge),
         spectrum.App("spectrum", badge),
         hwmonitor.App("hwmon", badge),
-        hot_topic.HotTopic("hot topic", badge),
+        app_manager.AppManager("appman", badge),
         # Only 4, the 5th button goes to Home
     ]
     user_menu = app_menu.AppMenu("User", badge, user_apps, False)
