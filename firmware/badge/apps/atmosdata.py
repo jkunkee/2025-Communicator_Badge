@@ -225,5 +225,5 @@ class AtmosphereData(BaseApp):
         super().switch_to_background()
 
 # Zampire App Manager metadata
-APP_NAME = "AirQuality"
+APP_NAME = "ATMOS"
 APP_CLASS = AtmosphereData
