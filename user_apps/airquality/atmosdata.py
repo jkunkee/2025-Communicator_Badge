@@ -71,6 +71,10 @@ class AtmosphereData(BaseApp):
         # UI object tracking (TODO: lean heavier on LVGL and micropython to avoid this)
         self.current_line_labels = []
 
+        # UI state machine
+        self.UI_STATES = ["raw", "gas", "particle"]
+        self.ui_state = self.UI_STATES[0]
+
     def start(self):
         super().start()
         if not self.producing_data:
@@ -172,9 +176,15 @@ class AtmosphereData(BaseApp):
         self.refresh_labels() # Does nothing if data is not new
 
         if self.badge.keyboard.f1():
-            pass
+            cur_index = self.UI_STATES.index(self.ui_state)
+            new_index = (cur_index - 1) % len(self.UI_STATES)
+            self.ui_state = self.UI_STATES[new_index]
+            print(f"ATMOS new state: {self.ui_state}")
         if self.badge.keyboard.f2():
-            pass
+            cur_index = self.UI_STATES.index(self.ui_state)
+            new_index = (cur_index + 1) % len(self.UI_STATES)
+            self.ui_state = self.UI_STATES[new_index]
+            print(f"ATMOS new state: {self.ui_state}")
         if self.badge.keyboard.f3():
             pass
         if self.badge.keyboard.f4():
@@ -213,7 +223,7 @@ class AtmosphereData(BaseApp):
             label.set_pos(214, y_pos)
             self.current_line_labels.append(label)
             y_pos += 13
-        self.p.create_menubar(["", "", "", "", "Done"])
+        self.p.create_menubar(["Prev", "Next", "", "", "Home"])
         self.p.replace_screen()
 
         self.screen_has_latest_data = False
