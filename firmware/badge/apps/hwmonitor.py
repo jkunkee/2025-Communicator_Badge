@@ -422,3 +422,7 @@ class HardwareMonitor(BaseApp):
 
 # Export the app class
 App = HardwareMonitor
+
+# Zampire App Manager metadata
+APP_NAME = "HwMon"
+APP_CLASS = App
