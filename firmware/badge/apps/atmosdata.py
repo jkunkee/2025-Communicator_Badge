@@ -11,6 +11,7 @@ import ui.styles as styles
 import lvgl
 import random
 import utime
+from collections import deque
 
 # Yes, this is a Doctor Who reference
 ATMOS_PROTOCOL = Protocol(port=25, name="AtmosphereData", structdef="!Bffffffff")
@@ -39,16 +40,40 @@ class AtmosphereData(BaseApp):
     def __init__(self, name: str, badge):
         super().__init__(name, badge)
 
+        # global configuration constants
         self.spoof_data_prod = False
+        self.last_data_spoof = 0
+
+        # To decouple the timing of LoRa broadcasts, UI updates, and sensor reads,
+        # each sensor reading is cached in these variables.
+        self.series_len = 60
+        self.series_map = {
+            "co2_ppm": deque([], self.series_len),
+            "temp_C": deque([], self.series_len),
+            "hum_%": deque([], self.series_len),
+            "part_0.5umppcm3": deque([], self.series_len),
+            "part_1.0umppcm3": deque([], self.series_len),
+            "part_2.5umppcm3": deque([], self.series_len),
+            "part_4.0umppcm3": deque([], self.series_len),
+            "part_10.0umppcm3": deque([], self.series_len),
+        }
+        self.series_freshness_map = {
+            "scd30": False,
+            "sps30": False,
+        }
 
         # device constants
-        self.sensor_refresh_interval_ms = 5000
+        self.max_read_interval_ms = 5000
         scd30_address = 0x61
+        scd30_device_update_interval_s = 5
         sps30_address = 0x69
 
-        # main app timing info
+        # network constants
+        self.broadcast_interval = 5000
+
+        # app parameters
         self.foreground_sleep_ms = 10
-        self.background_sleep_ms = self.sensor_refresh_interval_ms
+        self.background_sleep_ms = self.max_read_interval_ms
 
         # See what's out there and set it up
         # n.b. this is usually naive and ignores i2c spec discovery mechanics
@@ -56,7 +81,7 @@ class AtmosphereData(BaseApp):
 
         if scd30_address in i2c_scan_result:
             self.scd30 = SCD30(self.badge.sao_i2c, scd30_address) # leave internal sleep at default 1000us
-            self.scd30.set_measurement_interval(int(self.sensor_refresh_interval_ms/1000))
+            self.scd30.set_measurement_interval(scd30_device_update_interval_s)
         else:
             self.scd30 = None
 
@@ -69,26 +94,19 @@ class AtmosphereData(BaseApp):
         # If we have a sensor, act as a data producer; otherwise, listen on LoRa
         self.producing_data = self.scd30 != None or self.sps30 != None or self.spoof_data_prod
 
-        # To decouple the timing of LoRa broadcasts, UI updates, and sensor reads,
-        # each sensor reading is cached in these variables.
-        # TODO: don't Fill out dummy data to avoid crashes when the sequencing isn't right, just get it right
-        self.co2_measurement = [-1.0, -1.0, -1.0]
-        self.particle_measurement = []
-        for idx in range(0,4+5+2):
-            self.particle_measurement.append(["",-1.0]) # incomplete dummy data
-
-        # Data freshness indicator
-        self.screen_has_latest_data = True
         # LoRa rate limiter (minimum broadcast interval is sensor_refresh_interval_ms)
         self.last_transmission = 0
 
-        # UI object tracking (TODO: lean heavier on LVGL and micropython to avoid this)
-        self.current_line_labels = []
-        self.chart = None
-        self.co2_series = None
+        # UI object tracking
+        self.co2_page = None
+        self.co2_chart = None
+        self.co2_textarea = None
+        self.part_page = None
+        self.part_chart = None
+        self.part_textarea = None
 
         # UI state machine
-        self.UI_STATES = ["chart", "raw"]
+        self.UI_STATES = ["CO2", "Particulate"]
         self.ui_state = self.UI_STATES[0]
 
     def start(self):
@@ -100,68 +118,103 @@ class AtmosphereData(BaseApp):
         """Handle incoming messages."""
         print(f"atmos received message {message.payload}") # A bit chatty, innit
         if message.port == ATMOS_PROTOCOL.port and message.payload[0] == ATMOS_VERSION:
-            self.co2_measurement = message.payload[1:3]
-            self.particle_measurement = message.payload[4:8]
-            self.screen_has_latest_data = False
+            self.series_map["co2_ppm"].append(message.payload[1])
+            self.series_map["temp_C"].append(message.payload[2])
+            self.series_map["hum_%"].append(message.payload[3])
+            self.series_freshness_map["scd30"] = True
+            self.series_map["part_0.5umppcm3"].append(message.payload[4])
+            self.series_map["part_1.0umppcm3"].append(message.payload[5])
+            self.series_map["part_2.5umppcm3"].append(message.payload[6])
+            self.series_map["part_4.0umppcm3"].append(message.payload[7])
+            self.series_map["part_10.0umppcm3"].append(message.payload[8])
+            self.series_freshness_map["sps30"] = True
 
     def poll_data(self):
-        if self.spoof_data_prod:
-            now = utime.ticks_ms()
-            if (now - self.last_transmission) > self.sensor_refresh_interval_ms:
-                self.last_transmission = now
-                self.screen_has_latest_data = False
-                self.co2_measurement = [random.randint(500, 600), random.random()*35, random.random()*100]
-                self.particle_measurement = [
-                    ["", 0],
-                    ["", 0],
-                    ["", 0],
-                    ["", 0],
-                    ["lab0", random.random()*50.0],
-                    ["lab1", random.random()*50.0],
-                    ["lab2", random.random()*50.0],
-                    ["lab3", random.random()*50.0],
-                    ["lab4", random.random()*50.0],
-                ]
-            return
         if not self.producing_data:
+            return
+        now = utime.ticks_ms()
+        if self.spoof_data_prod:
+            if (now - self.last_data_spoof) > self.max_read_interval_ms:
+                self.series_map["co2_ppm"].append(random.random()*600 + 400)
+                self.series_map["temp_C"].append(random.random()*35.0)
+                self.series_map["hum_%"].append(random.random()*100.0)
+                self.series_freshness_map["scd30"] = True
+                self.series_map["part_0.5umppcm3"].append(random.random()*50.0)
+                self.series_map["part_1.0umppcm3"].append(random.random()*50.0)
+                self.series_map["part_2.5umppcm3"].append(random.random()*50.0)
+                self.series_map["part_4.0umppcm3"].append(random.random()*50.0)
+                self.series_map["part_10.0umppcm3"].append(random.random()*50.0)
+                self.series_freshness_map["sps30"] = True
+                self.last_data_spoof = now
             return
         # This scd30 driver isn't very resilient to the device falling off the bus sometimes,
         # but this is a wearable so we just deal with it.
         try:
-            transmit_new_data = False
-            now = utime.ticks_ms()
             if self.scd30 and self.scd30.get_status_ready():
-                self.screen_has_latest_data = False
-                transmit_new_data = True
-                print(f"co2: {self.co2_measurement}")
-                self.co2_measurement = self.scd30.read_measurement()
-            if self.sps30 and self.sps30.read_data_ready():
-                self.screen_has_latest_data = False
-                transmit_new_data = True
-                self.particle_measurement = self.sps30.read_measurement()
-                print(f"part: {self.particle_measurement}")
-            # Some sensors update frequently, so use holdoff to avoid spamming LoRa
-            if transmit_new_data and (now - self.last_transmission) > self.sensor_refresh_interval_ms:
-                tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
-                                                destination=BROADCAST_ADDRESS,
-                                                payload=(
-                                                    int(ATMOS_VERSION), # version
-                                                    float(self.co2_measurement[0]), # ppm CO2
-                                                    float(self.co2_measurement[1]), # deg C
-                                                    float(self.co2_measurement[2]), # percent relative humidity
-                                                    float(self.particle_measurement[4][1]), # particles/cm^3
-                                                    float(self.particle_measurement[5][1]), # particles/cm^3
-                                                    float(self.particle_measurement[6][1]), # particles/cm^3
-                                                    float(self.particle_measurement[7][1]), # particles/cm^3
-                                                    float(self.particle_measurement[8][1]), # particles/cm^3
-                                                ))
-                self.badge.lora.send(tx_msg)
-                print("ATMOS transmitted")
-                self.last_transmission = now
-        except:
+                co2_measurement = self.scd30.read_measurement()
+                print(f"co2: {co2_measurement}")
+                self.series_map["co2_ppm"].append(float(co2_measurement[0]))
+                self.series_map["temp_C"].append(float(co2_measurement[1]))
+                self.series_map["hum_%"].append(float(co2_measurement[2]))
+                self.series_freshness_map["scd30"] = True
+        except Exception as e:
             print("scd30 read failure")
+            print(e)
+        try:
+            if self.sps30 and self.sps30.read_data_ready():
+                particle_measurement = self.sps30.read_measurement()
+                print(f"part: {particle_measurement}")
+                self.series_map["part_0.5umppcm3"].append(particle_measurement[4][1])
+                self.series_map["part_1.0umppcm3"].append(particle_measurement[5][1])
+                self.series_map["part_2.5umppcm3"].append(particle_measurement[6][1])
+                self.series_map["part_4.0umppcm3"].append(particle_measurement[7][1])
+                self.series_map["part_10.0umppcm3"].append(particle_measurement[8][1])
+                self.series_freshness_map["sps30"] = True
+        except Exception as e:
+            print("sps30 read failure")
+            print(e)
 
-    def refresh_screen(self) -> None:
+    def is_all_data_fresh(self) -> bool:
+        return self.series_freshness_map["scd30"] and self.series_freshness_map["sps30"]
+
+    def is_any_data_fresh(self) -> bool:
+        return self.series_freshness_map["scd30"] or self.series_freshness_map["sps30"]
+
+    def reset_freshness(self) -> None:
+        self.series_freshness_map["scd30"] = False
+        self.series_freshness_map["sps30"] = False
+
+    def transmit_on_interval(self) -> None:
+        if self.spoof_data_prod:
+            print("ATMOS not transmitting in spoof mode")
+            return
+        if not self.producing_data:
+            return
+        now = utime.ticks_ms()
+        # Some sensors update frequently, so use holdoff to avoid spamming LoRa
+        if (now - self.last_transmission) > self.broadcast_interval:
+            tx_msg = NetworkFrame().set_fields(protocol=ATMOS_PROTOCOL,
+                                            destination=BROADCAST_ADDRESS,
+                                            payload=(
+                                                int(ATMOS_VERSION), # version
+                                                float(self.series_map["co2_ppm"][-1]), # ppm CO2
+                                                float(self.series_map["temp_C"][-1]), # deg C
+                                                float(self.series_map["hum_%"][-1]), # percent relative humidity
+                                                float(self.series_map["part_0.5umppcm3"][-1]), # particles/cm^3
+                                                float(self.series_map["part_1.0umppcm3"][-1]), # particles/cm^3
+                                                float(self.series_map["part_2.5umppcm3"][-1]), # particles/cm^3
+                                                float(self.series_map["part_4.0umppcm3"][-1]), # particles/cm^3
+                                                float(self.series_map["part_10.0umppcm3"][-1]), # particles/cm^3
+                                            ))
+            self.badge.lora.send(tx_msg)
+            print("ATMOS transmitted")
+            self.last_transmission = now
+
+    def refresh_screens(self) -> None:
+        return
+
+
+
         if self.screen_has_latest_data:
             return
         else:
@@ -208,17 +261,23 @@ class AtmosphereData(BaseApp):
         self.chart.set_next_value(self.co2_series, int(self.co2_measurement[0]))
         self.chart.set_next_value(self.hum_series, int(self.co2_measurement[2]))
 
-    def load_screen(self):
-        if self.ui_state == self.UI_STATES[self.UI_STATES.index("raw")]:
-            lvgl.screen_load(self.p.scr)
-        elif self.ui_state == self.UI_STATES[self.UI_STATES.index("chart")]:
-            lvgl.screen_load(self.chart_page.scr)
+    def load_current_screen(self):
+        # TODO: UI_STATES is a bit clunky
+        if self.ui_state == "CO2":
+            lvgl.screen_load(self.co2_page.scr)
+        elif self.ui_state == "Particulate":
+            lvgl.screen_load(self.part_page.scr)
         else:
             pass
 
     def run_foreground(self):
         self.poll_data() # Does nothing if no sensors present
-        self.refresh_screen() # Does nothing if data is not new
+
+        if self.is_any_data_fresh():
+            if self.is_all_data_fresh():
+                self.transmit_on_interval()
+            self.refresh_screens() # Does nothing if data is not new
+            self.reset_freshness()
 
         cur_ui_state = self.ui_state
 
@@ -243,17 +302,44 @@ class AtmosphereData(BaseApp):
             return
 
         if cur_ui_state != self.ui_state:
-            self.load_screen()
+            self.load_current_screen()
 
     def run_background(self):
         super().run_background()
         self.poll_data() # Does nothing if no sensors present
+        if (self.is_all_data_fresh()):
+            self.transmit_on_interval()
+            self.reset_freshness()
 
     def switch_to_foreground(self):
         super().switch_to_foreground()
-        self.p = Page()
-        ## Note this order is important: it renders top to bottom that the "content" section expands to fill empty space
-        ## If you want to go fully clean-slate, you can draw straight onto the p.scr object, which should fit the full screen.
+
+        self.co2_page = Page()
+        self.co2_page.create_infobar(["Atmospheric Data Display", "SCD30 (NDIR CO2)"])
+        self.co2_page.create_content()
+        self.co2_textarea = lvgl.textarea(self.co2_page.content)
+        self.co2_textarea.set_width(lvgl.pct(50))
+        self.co2_chart = lvgl.chart(self.co2_page.content)
+        self.co2_chart.set_width(lvgl.pct(50))
+        self.co2_page.create_menubar(["Prev", "Next", "", "", "Home"])
+
+        self.part_page = Page()
+        self.part_page.create_infobar(["Atmospheric Data Display", "SPS30 (particulate)"])
+        self.part_page.create_content()
+        self.part_textarea = lvgl.textarea(self.part_page.content)
+        self.part_textarea.set_width(lvgl.pct(50))
+        self.part_chart = lvgl.chart(self.part_page.content)
+        self.part_chart.set_width(lvgl.pct(50))
+        self.part_page.create_menubar(["Prev", "Next", "", "", "Home"])
+
+        self.refresh_screens()
+        self.load_current_screen()
+
+        return
+
+
+
+
         self.p.create_infobar(["Atmospheric Data Display", ""])
         if not self.producing_data:
             self.p.infobar_right.set_text("Awaiting packets")
@@ -305,12 +391,17 @@ class AtmosphereData(BaseApp):
         # work with.
         temp_page = Page()
         lvgl.screen_load(temp_page.scr)
-        self.p.delete()
-        self.p = None
-        self.chart = None
-        self.co2_series = None
-        self.chart_page.delete()
-        self.chart_page = None
+
+        self.co2_page.delete()
+        self.co2_page = None
+        self.co2_chart = None
+        self.co2_textarea = None
+
+        self.part_page.delete()
+        self.part_page = None
+        self.part_chart = None
+        self.part_textarea = None
+
         super().switch_to_background()
 
 # Zampire App Manager metadata
