@@ -1,4 +1,4 @@
-"""Snake game for the badge."""
+"""Snake game by blinkingthing"""
 
 import lvgl
 import random
@@ -8,7 +8,7 @@ from ui import styles
 from hardware.keyboard import Keyboard
 
 
-class SnakeApp(BaseApp):
+class Snake(BaseApp):
     """Classic Snake game using arrow keys."""
 
     def __init__(self, name: str, badge):
