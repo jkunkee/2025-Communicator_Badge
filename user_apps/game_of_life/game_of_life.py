@@ -1,4 +1,4 @@
-"""Conway's Game Of Life."""
+"""Conway's Game Of Life by Jacob Still"""
 
 import random
 import lvgl
@@ -61,13 +61,13 @@ class Grid:
             for x in range(self.width):
                 self.cells[y][x] = 1
 
-class App(BaseApp):
+class Life(BaseApp):
     """Define a new app to run on the badge."""
 
     def __init__(self, name: str, badge):
         super().__init__(name, badge)
-        self.foreground_sleep_ms = 100
-        self.background_sleep_ms = 10000 # Run very infrequently in background
+        # self.foreground_sleep_ms = 10
+        # self.background_sleep_ms = 10000 # Run very infrequently in background
 
         self.resolutions = [2, 4, 6, 8, 10, 12, 14, 16]
         self.current_res_index = self.resolutions.index(8)
@@ -194,7 +194,7 @@ class App(BaseApp):
 
     def setup_menu_screen(self):
         print("GoL: Setting up MAIN_MENU screen.")
-        self.foreground_sleep_ms = 100
+        self.foreground_sleep_ms = 10
         self.page = None # Force page recreation
         self.cell_objects = None
         self.page = Page()
@@ -203,12 +203,12 @@ class App(BaseApp):
         infobar_text = f"Mode: {capitalize(current_mode_str)} ({grid_size_str})"
         self.page.create_infobar(["Game of Life", infobar_text])
         content = self.page.create_content()
-        self.page.create_menubar(["Start", "Mode", "Res", "", "Home"])
+        self.page.create_menubar(["Start/Stop", "Mode", "Res", "", "Home"])
         self.page.replace_screen()
 
     def setup_mode_select_screen(self):
         print("GoL: Setting up mode select screen.")
-        self.foreground_sleep_ms = 100
+        self.foreground_sleep_ms = 10
         self.page = None # Force page recreation
         self.selection_labels = []
         self.page = Page()
@@ -221,7 +221,7 @@ class App(BaseApp):
 
     def setup_resolution_select_screen(self):
         print("GoL: Setting up resolution select screen.")
-        self.foreground_sleep_ms = 100
+        self.foreground_sleep_ms = 10
         self.page = None # Force page recreation
         self.selection_labels = []
         self.page = Page()
