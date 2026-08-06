@@ -15,9 +15,12 @@ class Spectrum(BaseApp):
         super().__init__(name, badge)
         self.foreground_sleep_ms = 1  # Minimal sleep - each channel scan takes ~4ms anyway
 
-        # Spectrum settings
-        self.start_freq = 860.0  # MHz
-        self.end_freq = 886.0    # MHz
+        # Spectrum settings for EU863-870 band
+        #self.start_freq = 860.0  # MHz
+        #self.end_freq = 886.0    # MHz
+        # Spectrum settings for 915 MHz ISM band
+        self.start_freq = 902.0  # MHz
+        self.end_freq = 928.0    # MHz
         self.num_channels = 52   # Number of frequency steps (0.5 MHz apart)
         self.channel_width = (self.end_freq - self.start_freq) / self.num_channels
 
