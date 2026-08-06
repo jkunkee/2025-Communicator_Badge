@@ -11,7 +11,7 @@ import pathlib
 import subprocess
 from typing import Iterable
 
-port = "a1"  ## port argument to mpremote.  a0 for /dev/ttyACM0, etc
+port = "c3"  ## port argument to mpremote.  a0 for /dev/ttyACM0, etc
 
 def check_path(path: str, ) -> dict[str, bytes]:
     files: dict[str, bytes] = {}
