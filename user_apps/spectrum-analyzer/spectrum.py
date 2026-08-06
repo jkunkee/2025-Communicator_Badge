@@ -1,4 +1,5 @@
-"""Spectrum Analyzer app - displays RF spectrum activity."""
+"""Spectrum Analyzer app by blinkingthing"""
+"""Modified by Tom Nardi for Hackaday Europe 2026"""
 
 import lvgl
 import gc
@@ -7,16 +8,16 @@ from ui import styles
 from net._sx126x import SX126X_CMD_GET_RSSI_INST
 
 
-class SpectrumAnalyzer(BaseApp):
+class Spectrum(BaseApp):
     """RF spectrum analyzer using the SX1262 LoRa radio."""
 
     def __init__(self, name: str, badge):
         super().__init__(name, badge)
         self.foreground_sleep_ms = 1  # Minimal sleep - each channel scan takes ~4ms anyway
 
-        # Spectrum settings for 915 MHz ISM band
-        self.start_freq = 902.0  # MHz
-        self.end_freq = 928.0    # MHz
+        # Spectrum settings
+        self.start_freq = 860.0  # MHz
+        self.end_freq = 886.0    # MHz
         self.num_channels = 52   # Number of frequency steps (0.5 MHz apart)
         self.channel_width = (self.end_freq - self.start_freq) / self.num_channels
 
@@ -117,17 +118,21 @@ class SpectrumAnalyzer(BaseApp):
 
     def update_title(self):
         """Update title based on current display mode."""
+        """ Create range string """
+        range_display = str(self.start_freq) + " to " + str(self.end_freq) + " MHz"
         if self.title_label:
             if self.display_mode == "spectrum":
-                self.title_label.set_text("Spectrum - 902-928 MHz")
+                self.title_label.set_text("Spectrum - " + range_display)
             else:
-                self.title_label.set_text("Waterfall - 902-928 MHz")
+                self.title_label.set_text("Waterfall - " + range_display)
 
     def draw_freq_labels(self):
         """Draw frequency labels and grid lines."""
         # Draw vertical grid lines and labels every 5 MHz
         # 902, 905, 910, 915, 920, 925 MHz
-        grid_freqs = [902, 905, 910, 915, 920, 925, 928]
+        #grid_freqs = [902, 905, 910, 915, 920, 925, 928]#
+        grid_freqs = list(range(int(self.start_freq), int(self.end_freq), 5))
+        print(grid_freqs)
 
         for freq in grid_freqs:
             # Calculate channel position for this frequency
@@ -662,7 +667,3 @@ class SpectrumAnalyzer(BaseApp):
             self.badge.display.clear()
         except:
             pass
-
-
-# Export the app class
-App = SpectrumAnalyzer
