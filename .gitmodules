@@ -1,0 +1,6 @@
+[submodule "firmware/badge/libs/micropython_scd30"]
+	path = firmware/badge/libs/micropython_scd30
+	url = https://github.com/agners/micropython-scd30.git
+[submodule "firmware/badge/libs/sps30_micropython"]
+	path = firmware/badge/libs/sps30_micropython
+	url = https://github.com/toddauer/SPS30-MicroPython.git
